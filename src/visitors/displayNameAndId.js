@@ -16,6 +16,25 @@ import {
   isStyled,
 } from '../utils/detectors'
 
+// Tolerant predicate for "does this withConfig arguments object already carry
+// displayName/componentId". `ObjectExpression.properties` can hold ObjectMethod
+// and SpreadElement entries with no key; keys themselves can be Identifier,
+// StringLiteral, or a computed Expression. Reading `.key.name` blindly crashes
+// on any of those, and a too-narrow check silently double-configures shapes
+// like `{ 'displayName': 'X' }` so the auto displayName overrides at runtime.
+const NAMES = ['displayName', 'componentId']
+const hasDisplayNameOrComponentId = (t, properties) =>
+  properties.some(prop => {
+    if (!t.isObjectProperty(prop)) return false
+    if (t.isIdentifier(prop.key) && !prop.computed) {
+      return NAMES.includes(prop.key.name)
+    }
+    if (t.isStringLiteral(prop.key)) {
+      return NAMES.includes(prop.key.value)
+    }
+    return false
+  })
+
 const addConfig = t => (path, displayName, componentId) => {
   if (!displayName && !componentId) {
     return
@@ -46,9 +65,7 @@ const addConfig = t => (path, displayName, componentId) => {
     existingConfig &&
     existingConfig.arguments.length &&
     Array.isArray(existingConfig.arguments[0].properties) &&
-    !existingConfig.arguments[0].properties.some(prop =>
-      ['displayName', 'componentId'].includes(prop.key.name)
-    )
+    !hasDisplayNameOrComponentId(t, existingConfig.arguments[0].properties)
   ) {
     existingConfig.arguments[0].properties.push(...withConfigProps)
     return
@@ -62,9 +79,7 @@ const addConfig = t => (path, displayName, componentId) => {
     path.node.callee.callee.property.name == 'withConfig' &&
     path.node.callee.arguments.length &&
     Array.isArray(path.node.callee.arguments[0].properties) &&
-    !path.node.callee.arguments[0].properties.some(prop =>
-      ['displayName', 'componentId'].includes(prop.key.name)
-    )
+    !hasDisplayNameOrComponentId(t, path.node.callee.arguments[0].properties)
   ) {
     path.node.callee.arguments[0].properties.push(...withConfigProps)
     return
@@ -198,7 +213,20 @@ const getComponentId = state => {
   return `${useNamespace(state)}sc-${getFileHash(state)}-${getNextId(state)}`
 }
 
+const taggedTagAlreadyConfigured = (t, path) => {
+  const tag = path.node.tag
+  if (!tag) return false
+  if (!t.isCallExpression(tag)) return false
+  const callee = tag.callee
+  if (!t.isMemberExpression(callee)) return false
+  if (!callee.property || callee.property.name !== 'withConfig') return false
+  const firstArg = tag.arguments[0]
+  if (!firstArg || !Array.isArray(firstArg.properties)) return false
+  return hasDisplayNameOrComponentId(t, firstArg.properties)
+}
+
 export default t => (path, state) => {
+  if (taggedTagAlreadyConfigured(t, path)) return
   if (
     path.node.tag
       ? isStyled(t)(path.node.tag, state)
@@ -222,8 +250,9 @@ export default t => (path, state) => {
           path.node.callee.callee.property.name === 'withConfig' &&
           path.node.callee.arguments.length &&
           Array.isArray(path.node.callee.arguments[0].properties) &&
-          !path.node.callee.arguments[0].properties.some(prop =>
-            ['displayName', 'componentId'].includes(prop.key.name)
+          !hasDisplayNameOrComponentId(
+            t,
+            path.node.callee.arguments[0].properties
           ))
   ) {
     const displayName =
