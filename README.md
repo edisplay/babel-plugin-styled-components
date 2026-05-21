@@ -6,6 +6,13 @@ This plugin is a highly recommended supplement to the base styled-components lib
 - better debugging through automatic annotation of your styled components based on their context in the file system, etc.
 - various types of minification for styles and the tagged template literals styled-components uses
 
+## Requirements
+
+This plugin is tested against:
+
+- `@babel/core` `^7`
+- `styled-components` `>= 6` (earlier majors may still work but aren't exercised in CI)
+
 ## Quick start
 
 Install the plugin first:
@@ -21,6 +28,13 @@ Then add it to your babel configuration:
   "plugins": ["babel-plugin-styled-components"]
 }
 ```
+
+## Options
+
+Full option reference lives on the [styled-components documentation site](https://www.styled-components.com/docs/tooling#babel-plugin). A couple worth flagging here:
+
+- `topLevelImportPaths` (`string[]`): additional module specifiers whose `styled` export should be recognized alongside `styled-components`. Useful for libraries that re-export the styled-components API.
+- `cssPropImportPath` (`string`, default `'styled-components'`): which package the css-prop transform should auto-import `styled` from when the file doesn't already have a styled import. Set to `'styled-components/native'` for React Native targets.
 
 ## Changelog
 

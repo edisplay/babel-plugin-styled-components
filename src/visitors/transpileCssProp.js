@@ -1,7 +1,7 @@
 // Most of this code was taken from @satya164's babel-plugin-css-prop
 import { addDefault } from '@babel/helper-module-imports'
 import { importLocalName } from '../utils/detectors'
-import { useCssProp } from '../utils/options'
+import { useCssProp, useCssPropImportPath } from '../utils/options'
 import { processCallExpression, processTaggedTemplate } from './process'
 
 const TAG_NAME_REGEXP = /^[a-z][a-z\d]*(\-[a-z][a-z\d]*)?$/
@@ -68,7 +68,7 @@ export default t => {
     // not directly callable, so treat it the same as "no default binding" and
     // inject a fresh default import to use as the css-prop callee.
     if (!importBinding || importBindingIsNamespace) {
-      addDefault(path, 'styled-components', {
+      addDefault(path, useCssPropImportPath(state), {
         nameHint: 'styled',
       })
 
@@ -174,8 +174,12 @@ export default t => {
         if (
           t.isMemberExpression(property.key) ||
           t.isCallExpression(property.key) ||
-          // checking for css={{[something]: something}}
+          // checking for css={{[something]: something}}; a plain (non-computed)
+          // identifier key is a literal property name and never resolves to a
+          // binding, even if the local scope happens to define a same-named
+          // variable. Only computed keys reference the surrounding scope.
           (t.isIdentifier(property.key) &&
+            property.computed &&
             path.scope.hasBinding(property.key.name) &&
             // but not a object reference shorthand like css={{ color }}
             (t.isIdentifier(property.value)
